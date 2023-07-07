@@ -213,11 +213,7 @@ def get_sorted_s_r_embed(s_hist,     # 2
     embeds_rel = rel_embeds[torch.LongTensor(flat_rel).cuda()]
 
     test_input = torch.tensor(flat_att).view(-1, 1).cuda()
-
-    '''
-    print(test_input.shape)    # torch.Size([3589, 1])
-    print(test_input)
-    '''
+    test_input = test_input.to(torch.float32)
 
     # W1 is Linear(in_features=1, out_features=200, bias=True)
     embeds_att = F.relu(
@@ -226,10 +222,10 @@ def get_sorted_s_r_embed(s_hist,     # 2
         )
     )
 
-    embeds = F.relu(W3(torch.cat([embeds_att, embeds_s, embeds_rel], dim=1)))
+    embeds = F.relu(W3(torch.cat([embeds_att, embeds_s, embeds_rel], dim=1).to(torch.float32)))
     # embeds_split = torch.split(embeds, len_s)
 
-    embeds_static = F.relu(W4(torch.cat([embeds_s, embeds_rel], dim=1)))
+    embeds_static = F.relu(W4(torch.cat([embeds_s, embeds_rel], dim=1).to(torch.float32)))
     # embeds_static_split = torch.split(embeds_static, len_s)
 
     return s_len_non_zero, s_tem, r_tem, embeds, embeds_static, len_s, s_idx  # embeds_split, embeds_static_split,

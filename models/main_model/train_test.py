@@ -4,7 +4,7 @@ import time
 import torch
 import utils
 import os
-from model import DArtNet
+from model_test import DArtNet
 from sklearn.utils import shuffle
 import pickle
 
