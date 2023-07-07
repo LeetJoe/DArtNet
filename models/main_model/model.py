@@ -46,6 +46,7 @@ class DArtNet(nn.Module):
         self.f2 = nn.Linear(3 * h_dim, num_nodes)
 
         self.W1 = nn.Linear(1, self.h_dim)
+        # self.W1 is Linear(in_features=1, out_features=200, bias=True)
         # self.W2 = nn.Linear(2 * self.h_dim, self.h_dim)
         self.W3 = nn.Linear(3 * self.h_dim, self.h_dim)
         self.W4 = nn.Linear(2 * self.h_dim, self.h_dim)
@@ -85,15 +86,15 @@ class DArtNet(nn.Module):
     This should be different from testing because in testing we don't use ground-truth history.
     """
     def forward(self,
-                triplets,
-                s_hist,
-                rel_s_hist,
-                att_s_hist,
-                self_att_s_hist,
-                o_hist,
-                rel_o_hist,
-                att_o_hist,
-                self_att_o_hist,
+                triplets,    # 1
+                s_hist,    # 2
+                rel_s_hist,    # 3
+                att_s_hist,    # 4
+                self_att_s_hist,    # 5
+                o_hist,    # 6
+                rel_o_hist,    # 7
+                att_o_hist,    # 8
+                self_att_o_hist,    # 9
                 predict_both=True):
         # print('here')
         s = triplets[:, 0].type(torch.cuda.LongTensor)
@@ -109,9 +110,21 @@ class DArtNet(nn.Module):
         # o_hist_len = torch.LongTensor(list(map(len, o_hist))).cuda()
         # o_len, o_idx = o_hist_len.sort(0, descending=True)
         # print('here1')
-        s_packed_input, att_s_packed_input = self.aggregator_s(
-            s_hist, rel_s_hist, att_s_hist, self_att_s_hist, s, r,
-            self.ent_embeds, self.rel_embeds, self.W1, self.W3, self.W4)
+
+        print('before aggregator_s:')
+        # todo aggregator_s 被赋予一个 MeanAggregator 的实例，forward 被定义为 Callable
+        s_packed_input, att_s_packed_input = self.aggregator_s(    # todo XXX， function, type MeanAggregator()
+            s_hist,  # 2
+            rel_s_hist,  # 3
+            att_s_hist,  # 4
+            self_att_s_hist,  # 5
+            s,  # 1 第 0 列，类型由 dtype=torch.float64 转换成了 torch.cuda.LongTensor
+            r,  # 1 第 1 列，类型由 dtype=torch.float64 转换成了 torch.cuda.LongTensor
+            self.ent_embeds,
+            self.rel_embeds,
+            self.W1,
+            self.W3,
+            self.W4)
 
         # o_packed_input, att_o_packed_input = self.aggregator_o(
         #     o_hist, rel_o_hist, att_o_hist, self_att_o_hist, o, r,
@@ -201,11 +214,18 @@ class DArtNet(nn.Module):
     def get_loss(self, triplets, s_hist, rel_s_hist, att_s_hist,
                  self_att_s_hist, o_hist, rel_o_hist, att_o_hist,
                  self_att_o_hist):
-        loss, loss_att_sub, _, _, _ = self.forward(triplets, s_hist,
-                                                   rel_s_hist, att_s_hist,
-                                                   self_att_s_hist, o_hist,
-                                                   rel_o_hist, att_o_hist,
-                                                   self_att_o_hist)
+        print("before model.forward....")
+        loss, loss_att_sub, _, _, _ = self.forward(triplets,    # 1
+                                                   s_hist,    # 2
+                                                   rel_s_hist,     # 3
+                                                   att_s_hist,    # 4
+                                                   self_att_s_hist,     # 5
+                                                   o_hist,    # 6
+                                                   rel_o_hist,     # 7
+                                                   att_o_hist,    # 8
+                                                   self_att_o_hist)    # 9
+        print("after forward....")
+        exit(0)
         return loss, loss_att_sub
 
     """

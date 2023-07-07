@@ -166,8 +166,16 @@ Get sorted s and r to make batch for RNN (sorted by length)
 '''
 
 
-def get_sorted_s_r_embed(s_hist, rel_hist, att_hist, s, r, ent_embeds,
-                         rel_embeds, W1, W3, W4):
+def get_sorted_s_r_embed(s_hist,     # 2
+                         rel_hist,     # 3
+                         att_hist,     # 4
+                         s,
+                         r,
+                         ent_embeds,
+                         rel_embeds,
+                         W1,
+                         W3,
+                         W4):
     s_hist_len = torch.LongTensor(list(map(len, s_hist))).cuda()
     s_len, s_idx = s_hist_len.sort(0, descending=True)
     num_non_zero = len(torch.nonzero(s_len))
@@ -203,7 +211,9 @@ def get_sorted_s_r_embed(s_hist, rel_hist, att_hist, s, r, ent_embeds,
 
     embeds_s = ent_embeds[torch.LongTensor(flat_s).cuda()]
     embeds_rel = rel_embeds[torch.LongTensor(flat_rel).cuda()]
-    embeds_att = F.relu(W1(torch.tensor(flat_att).view(-1, 1).cuda()))
+
+    # W1 is Linear(in_features=1, out_features=200, bias=True)
+    embeds_att = F.relu(W1(torch.tensor(flat_att).view(-1, 1).cuda()))     # todo error here
 
     embeds = F.relu(W3(torch.cat([embeds_att, embeds_s, embeds_rel], dim=1)))
     # embeds_split = torch.split(embeds, len_s)

@@ -117,14 +117,15 @@ def make_batch3(a, b, c, d, e, f, g, h, w, n):
     # For item i in a range that is a length of l,
     for i in range(0, len(a), n):
         # Create an index range for l of n items:
-        yield a[i:i + n], b[i:i +
-                            n], c[i:i +
-                                  n], d[i:i +
-                                        n], e[i:i +
-                                              n], f[i:i +
-                                                    n], g[i:i +
-                                                          n], h[i:i +
-                                                                n], w[i:i + n]
+        yield a[i:i + n], \
+            b[i:i + n], \
+            c[i:i + n], \
+            d[i:i + n], \
+            e[i:i + n], \
+            f[i:i + n], \
+            g[i:i + n], \
+            h[i:i + n], \
+            w[i:i + n]
 
 
 def get_data(s_hist, o_hist):

@@ -15,13 +15,46 @@ class MeanAggregator(nn.Module):
     def forward(self, s_hist, rel_hist, att_s_hist, self_att_s_hist, s, r,
                 ent_embeds, rel_embeds, W1, W3, W4):
 
+        '''
+        print('forward params are here')
+        print(s_hist)    # 2
+        print(rel_hist)    # 3
+        print(att_s_hist)    # 4
+        print(self_att_s_hist)    # 5
+        print(s)
+        print(r)
+        print(ent_embeds)
+        print(rel_embeds)
+        print(W1)
+        print(W3)
+        print(W4)
+        print("\n\n")
+        '''
+
         # for i in range(len(s_hist)):
         #     assert (len(s_hist[i]) == len(self_att_s_hist[i]))
         # print('forward')
-        s_len_non_zero, s_tem, r_tem, embeds_stack, embeds_static_stack, len_s, s_idx = get_sorted_s_r_embed(
-            s_hist, rel_hist, att_s_hist, s, r, ent_embeds, rel_embeds, W1, W3,
+        print('before Aggregator get_sorted_s_r_embed')
+        s_len_non_zero, \
+            s_tem, \
+            r_tem, \
+            embeds_stack, \
+            embeds_static_stack, \
+            len_s, \
+            s_idx = get_sorted_s_r_embed(    # todo Error here
+            s_hist,    # 2
+            rel_hist,    # 3
+            att_s_hist,    # 4
+            # self_att_s_hist,    # 5, 没有此项
+            s,    # 1
+            r,    # 1
+            ent_embeds,
+            rel_embeds,
+            W1,
+            W3,
             W4)
         # print('forward1')
+        print('after Aggregator get_sorted_s_r_embed')
 
         # To get mean vector at each time
         curr = 0
