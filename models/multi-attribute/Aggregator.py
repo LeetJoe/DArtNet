@@ -76,9 +76,9 @@ class MeanAggregator(nn.Module):
         att_embed_seq_tensor = self.dropout(att_embed_seq_tensor)
 
         s_packed_input = torch.nn.utils.rnn.pack_padded_sequence(
-            s_embed_seq_tensor, s_len_non_zero, batch_first=True)
+            s_embed_seq_tensor, s_len_non_zero.to('cpu'), batch_first=True)
         att_packed_input = torch.nn.utils.rnn.pack_padded_sequence(
-            att_embed_seq_tensor, s_len_non_zero, batch_first=True)
+            att_embed_seq_tensor, s_len_non_zero.to('cpu'), batch_first=True)
 
         return s_packed_input, att_packed_input
 
