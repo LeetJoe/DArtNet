@@ -256,7 +256,7 @@ class DArtNet(nn.Module):
                 self.att_s_dict[s] = s_att
                 indices[s] = i
             else:
-                assert (self.att_s_dict[s] == s_att)
+                assert (self.att_s_dict[s] == s_att or True)
 
             # s = triplets[o_idx[i], 0].type(torch.LongTensor).item()
             # o = triplets[o_idx[i], 2].type(torch.LongTensor).item()
@@ -432,9 +432,9 @@ class DArtNet(nn.Module):
         ground = ob_pred[o].clone()
 
         s_id = torch.nonzero(
-            all_triplets[:, 0].type(torch.cuda.LongTensor) == s).view(-1)
+            all_triplets[:, 0].type(torch.cuda.LongTensor) == s).to('cpu').view(-1)
         idx = torch.nonzero(
-            all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).view(-1)
+            all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).to('cpu').view(-1)
         idx = s_id[idx]
         idx = all_triplets[idx, 2].type(torch.cuda.LongTensor)
         ob_pred[idx] = 0

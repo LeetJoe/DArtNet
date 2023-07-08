@@ -94,7 +94,7 @@ class MeanAggregator(nn.Module):
             self_r_embed = rel_embeds[r_tem[i]].repeat(len(embeds), 1)
 
             self_att_embed = F.relu(
-                W1(torch.tensor(self_att_s_hist[s_idx[i]]).cuda().view(-1, 1).to(torch.float32)))
+                W1(torch.tensor(self_att_s_hist[s_idx[i]]).to(torch.float32).cuda().view(-1, 1)))
 
             att_embed_seq_tensor[i, torch.arange(len(embeds)), :] = torch.cat(
                 [self_att_embed, self_e_embed, embeds], dim=1)

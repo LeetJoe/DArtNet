@@ -61,7 +61,7 @@ class MeanAggregator(nn.Module):
             self_r_embed = rel_embeds[r_tem[i]].repeat(len(embeds), 1)
 
             self_att_embed = F.relu(
-                W1(torch.tensor(self_att_s_hist[s_idx[i]]).cuda().view(-1, 1)))
+                W1(torch.tensor(self_att_s_hist[s_idx[i]]).to(torch.float32).cuda().view(-1, 1)))
 
             att_embed_seq_tensor[i, torch.arange(len(embeds)), :] = torch.cat(
                 [self_att_embed, self_e_embed, embeds], dim=1)
@@ -73,9 +73,9 @@ class MeanAggregator(nn.Module):
         att_embed_seq_tensor = self.dropout(att_embed_seq_tensor)
 
         s_packed_input = torch.nn.utils.rnn.pack_padded_sequence(
-            s_embed_seq_tensor, s_len_non_zero, batch_first=True)
+            s_embed_seq_tensor, s_len_non_zero.to('cpu'), batch_first=True)
         att_packed_input = torch.nn.utils.rnn.pack_padded_sequence(
-            att_embed_seq_tensor, s_len_non_zero, batch_first=True)
+            att_embed_seq_tensor, s_len_non_zero.to('cpu'), batch_first=True)
 
         return s_packed_input, att_packed_input
 

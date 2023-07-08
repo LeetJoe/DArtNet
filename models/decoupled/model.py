@@ -420,9 +420,9 @@ class DArtNet(nn.Module):
         ground = ob_pred[o].clone()
 
         s_id = torch.nonzero(
-            all_triplets[:, 0].type(torch.cuda.LongTensor) == s).view(-1)
+            all_triplets[:, 0].type(torch.cuda.LongTensor) == s).to('cpu').view(-1)
         idx = torch.nonzero(
-            all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).view(-1)
+            all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).to('cpu').view(-1)
         idx = s_id[idx]
         idx = all_triplets[idx, 2].type(torch.cuda.LongTensor)
         ob_pred[idx] = 0
