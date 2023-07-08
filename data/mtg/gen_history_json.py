@@ -222,22 +222,22 @@ self_att_o_history_data = [[c[0] for c in k] for k in self_att_o_history_data]
 # pprint(att_s_history_data[-1])
 # pprint(self_att_s_history_data)
 
-with open('train_entity_s_history_data.txt', 'w') as fp:
+with open('train_entity_s_history_data.json', 'w') as fp:
     json.dump(entity_s_history_data, fp, indent=4)
-with open('train_rel_s_history_data.txt', 'w') as fp:
+with open('train_rel_s_history_data.json', 'w') as fp:
     json.dump(rel_s_history_data, fp, indent=4)
-with open('train_att_s_history_data.txt', 'w') as fp:
+with open('train_att_s_history_data.json', 'w') as fp:
     json.dump(att_s_history_data, fp, indent=4)
-with open('train_self_att_s_history_data.txt', 'w') as fp:
+with open('train_self_att_s_history_data.json', 'w') as fp:
     json.dump(self_att_s_history_data, fp, indent=4)
 
-with open('train_entity_o_history_data.txt', 'w') as fp:
+with open('train_entity_o_history_data.json', 'w') as fp:
     json.dump(entity_o_history_data, fp, indent=4)
-with open('train_rel_o_history_data.txt', 'w') as fp:
+with open('train_rel_o_history_data.json', 'w') as fp:
     json.dump(rel_o_history_data, fp, indent=4)
-with open('train_att_o_history_data.txt', 'w') as fp:
+with open('train_att_o_history_data.json', 'w') as fp:
     json.dump(att_o_history_data, fp, indent=4)
-with open('train_self_att_o_history_data.txt', 'w') as fp:
+with open('train_self_att_o_history_data.json', 'w') as fp:
     json.dump(self_att_o_history_data, fp, indent=4)
 
 entity_s_history_data_valid = [[] for _ in range(len(valid_data))]
@@ -348,22 +348,22 @@ self_att_s_history_data_valid = [[c[0] for c in k]
 self_att_o_history_data_valid = [[c[0] for c in k]
                                  for k in self_att_o_history_data_valid]
 
-with open('valid_entity_s_history_data.txt', 'w') as fp:
+with open('valid_entity_s_history_data.json', 'w') as fp:
     json.dump(entity_s_history_data_valid, fp, indent=4)
-with open('valid_rel_s_history_data.txt', 'w') as fp:
+with open('valid_rel_s_history_data.json', 'w') as fp:
     json.dump(rel_s_history_data_valid, fp, indent=4)
-with open('valid_att_s_history_data.txt', 'w') as fp:
+with open('valid_att_s_history_data.json', 'w') as fp:
     json.dump(att_s_history_data_valid, fp, indent=4)
-with open('valid_self_att_s_history_data.txt', 'w') as fp:
+with open('valid_self_att_s_history_data.json', 'w') as fp:
     json.dump(self_att_s_history_data_valid, fp, indent=4)
 
-with open('valid_entity_o_history_data.txt', 'w') as fp:
+with open('valid_entity_o_history_data.json', 'w') as fp:
     json.dump(entity_o_history_data_valid, fp, indent=4)
-with open('valid_rel_o_history_data.txt', 'w') as fp:
+with open('valid_rel_o_history_data.json', 'w') as fp:
     json.dump(rel_o_history_data_valid, fp, indent=4)
-with open('valid_att_o_history_data.txt', 'w') as fp:
+with open('valid_att_o_history_data.json', 'w') as fp:
     json.dump(att_o_history_data_valid, fp, indent=4)
-with open('valid_self_att_o_history_data.txt', 'w') as fp:
+with open('valid_self_att_o_history_data.json', 'w') as fp:
     json.dump(self_att_o_history_data_valid, fp, indent=4)
 
 entity_s_history_data_test = [[] for _ in range(len(test_data))]
@@ -474,20 +474,20 @@ self_att_s_history_data_test = [[c[0] for c in k]
 self_att_o_history_data_test = [[c[0] for c in k]
                                 for k in self_att_o_history_data_test]
 
-with open('test_entity_s_history_data.txt', 'w') as fp:
+with open('test_entity_s_history_data.json', 'w') as fp:
     json.dump(entity_s_history_data_test, fp, indent=4)
-with open('test_rel_s_history_data.txt', 'w') as fp:
+with open('test_rel_s_history_data.json', 'w') as fp:
     json.dump(rel_s_history_data_test, fp, indent=4)
-with open('test_att_s_history_data.txt', 'w') as fp:
+with open('test_att_s_history_data.json', 'w') as fp:
     json.dump(att_s_history_data_test, fp, indent=4)
-with open('test_self_att_s_history_data.txt', 'w') as fp:
+with open('test_self_att_s_history_data.json', 'w') as fp:
     json.dump(self_att_s_history_data_test, fp, indent=4)
 
-with open('test_entity_o_history_data.txt', 'w') as fp:
+with open('test_entity_o_history_data.json', 'w') as fp:
     json.dump(entity_o_history_data_test, fp, indent=4)
-with open('test_rel_o_history_data.txt', 'w') as fp:
+with open('test_rel_o_history_data.json', 'w') as fp:
     json.dump(rel_o_history_data_test, fp, indent=4)
-with open('test_att_o_history_data.txt', 'w') as fp:
+with open('test_att_o_history_data.json', 'w') as fp:
     json.dump(att_o_history_data_test, fp, indent=4)
-with open('test_self_att_o_history_data.txt', 'w') as fp:
+with open('test_self_att_o_history_data.json', 'w') as fp:
     json.dump(self_att_o_history_data_test, fp, indent=4)
