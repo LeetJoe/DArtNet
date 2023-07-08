@@ -19,7 +19,7 @@ class DArtNet(nn.Module):
                  gamma=1):    # 8
         super(DArtNet, self).__init__()
 
-        # 总 node 数量
+        # 总 node(entity) 数量
         self.num_nodes = num_nodes    # 1
 
         # hidden stat dim, 对应 --n-hidden 参数
@@ -28,7 +28,7 @@ class DArtNet(nn.Module):
         # 总 edge 数量
         self.num_rels = num_rels    # 3
 
-        # dropout todo 跟优化有关
+        # dropout todo 跟优化有关,是一个 hyper parameter
         self.dropout = nn.Dropout(dropout)    # 4
 
         # todo 好像没什么用？
@@ -44,25 +44,40 @@ class DArtNet(nn.Module):
         # loss 的系数，用于：loss = loss_sub + self.gamma * loss_att_sub
         self.gamma = gamma    # 8
 
-        self.rel_embeds = nn.Parameter(torch.Tensor(num_rels, h_dim))
-        nn.init.xavier_uniform_(self.rel_embeds,
-                                gain=nn.init.calculate_gain('relu'))
-
-        self.ent_embeds = nn.Parameter(torch.Tensor(self.num_nodes, h_dim))
+        # 初始化全 0 的 entity embeddings, shape = num_nodes(stat.txt里的第一个数) * h_dim
+        self.ent_embeds = nn.Parameter(torch.Tensor(self.num_nodes, self.h_dim))
+        # 对 rel_embeds 进行"Glorot initialization"。
         nn.init.xavier_uniform_(self.ent_embeds,
                                 gain=nn.init.calculate_gain('relu'))
 
-        self.sub_encoder = nn.GRU(3 * h_dim, h_dim, batch_first=True)
+        # 初始化全 0 的 relation embeddings, shape = num_rels(stat.txt里的第二个数) * h_dim
+        self.rel_embeds = nn.Parameter(torch.Tensor(self.num_rels, self.h_dim))
+        # 对 rel_embeds 进行"Glorot initialization"。
+        nn.init.xavier_uniform_(self.rel_embeds,
+                                gain=nn.init.calculate_gain('relu'))
+
+        # GRU: multi-layer gated recurrent unit (GRU) RNN
+        # 3 * self.h_dim 是 input size, self.h_dim 是 hidden size
+        # 继承关系： GRU -> RNNBase -> Module
+        # GRU 生成的矩阵内容不为 0，生成结果与 seed 有关。seed 不变，初始化的 sub_encoder 的内容是一样的。
+        self.sub_encoder = nn.GRU(3 * self.h_dim, self.h_dim, batch_first=True)
         # self.ob_encoder = self.sub_encoder
 
-        self.att_encoder = nn.GRU(3 * h_dim, h_dim, batch_first=True)
+        # 同上，随机生的 att_encoder 与 seed 有关，但与 sub_encoder 不同。
+        self.att_encoder = nn.GRU(3 * self.h_dim, self.h_dim, batch_first=True)
 
-        self.aggregator_s = MeanAggregator(h_dim, dropout, seq_len)
+        # callable, 对应于 MeanAggregator 的 forward 方法（继承自 nn.Module 接口）
+        self.aggregator_s = MeanAggregator(self.h_dim, dropout, seq_len)
         # self.aggregator_o = self.aggregator_s
 
+        # nn.Linear()也是一个 callable 对象，调用的是 forward 方法（继承自 nn.Module )
+        # 2 * self.h_dim 是 in_features, 1 是 out_features。
+        # 以与 seed 有关的方式初始化为0的tensor，与 GRU 类似
         self.f1 = nn.Linear(2 * self.h_dim, 1)
-        self.f2 = nn.Linear(3 * h_dim, self.num_nodes)
 
+        self.f2 = nn.Linear(3 * self.h_dim, self.num_nodes)
+
+        # todo 在相关文章里经常提到的 W 矩阵？
         self.W1 = nn.Linear(1, self.h_dim)
         # self.W1 is Linear(in_features=1, out_features=200, bias=True)
         # self.W2 = nn.Linear(2 * self.h_dim, self.h_dim)
@@ -96,8 +111,9 @@ class DArtNet(nn.Module):
 
         self.latest_time = 0
 
+        # 两种损失函数
         self.criterion = nn.CrossEntropyLoss()
-        self.att_criterion = nn.MSELoss()
+        self.att_criterion = nn.MSELoss()  # mean squared error
 
     """
     Prediction function in training. 
@@ -130,8 +146,7 @@ class DArtNet(nn.Module):
         # print('here1')
 
         print('before aggregator_s:')
-        # todo aggregator_s 被赋予一个 MeanAggregator 的实例，forward 被定义为 Callable
-        s_packed_input, att_s_packed_input = self.aggregator_s(    # todo XXX， function, type MeanAggregator()
+        s_packed_input, att_s_packed_input = self.aggregator_s(    # callable, type MeanAggregator()
             s_hist,  # 2
             rel_s_hist,  # 3
             att_s_hist,  # 4
@@ -229,10 +244,18 @@ class DArtNet(nn.Module):
         # self.rel_o_his_cache = [[] for _ in range(self.num_nodes)]
         # self.self_att_o_his_cache = [[] for _ in range(self.num_nodes)]
 
-    def get_loss(self, triplets, s_hist, rel_s_hist, att_s_hist,
-                 self_att_s_hist, o_hist, rel_o_hist, att_o_hist,
-                 self_att_o_hist):
+    def get_loss(self,
+                 triplets,    # 1
+                 s_hist,    # 2
+                 rel_s_hist,    # 3
+                 att_s_hist,    # 4
+                 self_att_s_hist,    # 5
+                 o_hist,    # 6
+                 rel_o_hist,    # 7
+                 att_o_hist,    # 8
+                 self_att_o_hist):    # 9
         print("before model.forward....")
+        # todo forward 的本质是计算 loss ？？
         loss, loss_att_sub, _, _, _ = self.forward(triplets,    # 1
                                                    s_hist,    # 2
                                                    rel_s_hist,     # 3

@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import time
 import torch
-import utils
+import utils_test as utils
 import os
 from model_test import DArtNet
 from sklearn.utils import shuffle
@@ -23,6 +23,7 @@ def train(args):
     if use_cuda:
         torch.cuda.set_device(args.gpu)
 
+    # 按照参数 dropout, n_hidden, gama, num_k 存储和加载模型
     model_dir = 'models/' + args.dataset + '/{}-{}-{}-{}'.format(
         args.dropout, args.n_hidden, args.gamma, args.num_k)
 
@@ -31,14 +32,14 @@ def train(args):
     os.makedirs(model_dir, exist_ok=True)
 
     print("start training...")
-    model = DArtNet(num_nodes,
-                    args.n_hidden,
-                    num_rels,
-                    dropout=args.dropout,
-                    model=args.model,
-                    seq_len=args.seq_len,
-                    num_k=args.num_k,
-                    gamma=args.gamma)
+    model = DArtNet(num_nodes,    # 1
+                    args.n_hidden,    # 2
+                    num_rels,    # 3
+                    dropout=args.dropout,    # 4
+                    model=args.model,    # 5
+                    seq_len=args.seq_len,    # 6
+                    num_k=args.num_k,    # 7
+                    gamma=args.gamma)    # 8
 
     print('model initialized')
     optimizer = torch.optim.Adam(model.parameters(),
@@ -91,6 +92,7 @@ def train(args):
 
     epoch = 0
 
+    # retrain 可以加载之前训练的结果继续训练
     if args.retrain != 0:
         try:
             checkpoint = torch.load(model_dir + '/checkpoint.pth',
@@ -119,7 +121,7 @@ def train(args):
 
     while True:
         print('a train loop started')
-        model.train()
+        model.train()   # todo 每一轮应该没有数据才会，为什么上来就 train？
         if epoch == args.max_epochs:
             break
         epoch += 1
@@ -128,13 +130,16 @@ def train(args):
         # loss_att_ob_epoch = 0
         t0 = time.time()
 
-        train_data, entity_s_history_train, rel_s_history_train, entity_o_history_train, rel_o_history_train, att_s_history_train, self_att_s_history_train, att_o_history_train, self_att_o_history_train = shuffle(
+        # shuffle 相当于把所有参数视为一个列向量组成一个矩阵，然后做行 shuffle。故所有参数的第一层维度大小必须相同，否则会报错。
+        train_data, entity_s_history_train, rel_s_history_train, entity_o_history_train, rel_o_history_train, \
+            att_s_history_train, self_att_s_history_train, att_o_history_train, self_att_o_history_train = shuffle(
             train_data, entity_s_history_train, rel_s_history_train,
             entity_o_history_train, rel_o_history_train, att_s_history_train,
             self_att_s_history_train, att_o_history_train,
             self_att_o_history_train)
 
         iteration = 0
+        # 按 args.batch_size 把参数里的数组进行分组并按次序返回，用这种方式遍历
         for batch_data, s_hist, rel_s_hist, o_hist, rel_o_hist, att_s_hist, self_att_s_hist, att_o_hist, self_att_o_hist in utils.make_batch3(
                 train_data, entity_s_history_train, rel_s_history_train,
                 entity_o_history_train, rel_o_history_train,
@@ -160,6 +165,7 @@ def train(args):
             print(len(self_att_o_hist))   # 9
             '''
 
+            # todo 这里需要看 model 的具体实现
             loss, loss_att_sub = model.get_loss(
                 batch_data,   # 1
                 s_hist,   # 2
@@ -174,6 +180,7 @@ def train(args):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(),
                                            args.grad_norm)  # clip gradients
+            # todo Adam 也需要深入看一下，不然这里看不懂
             optimizer.step()
             optimizer.zero_grad()
             loss_epoch += loss.item()
