@@ -228,15 +228,21 @@ def get_sorted_s_r_embed(s_hist,     # 2
     test_input = test_input.to(torch.float32)
 
     # W1 is Linear(in_features=1, out_features=200, bias=True)
+    # Applies the rectified linear unit function element-wise.
     embeds_att = F.relu(
-        W1(     # todo error here
+        W1(
             test_input
         )
     )
 
+    # torch.cat([a, b, c], dim=1) 表示按第二个维度进行拼接，最后行数不变，列变宽（累加）；a,b,c列数可以不同，行数必须相同；
+    # torch.cat([a, b, c], dim=0) 表示按第一个维度进行拼接，最后列数不变，行变多（累加）；a,b,c行数可以不同，列数必须相同；
+    # embeds_att, embeds_s, embeds_rel 都是 200 列，cat()后变成 600 列，经 W3() 后又变成 200列；
     embeds = F.relu(W3(torch.cat([embeds_att, embeds_s, embeds_rel], dim=1).to(torch.float32)))
+
     # embeds_split = torch.split(embeds, len_s)
 
+    # 与 embeds 相比，前面少一个 embeds_att .
     embeds_static = F.relu(W4(torch.cat([embeds_s, embeds_rel], dim=1).to(torch.float32)))
     # embeds_static_split = torch.split(embeds_static, len_s)
 

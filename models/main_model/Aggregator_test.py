@@ -54,6 +54,9 @@ class MeanAggregator(nn.Module):
             W4)
         # print('forward1')
 
+        # s_len 按元素项长度降序的长度值； s_len_non_zero, 前者去掉后面的0；s_tem 去掉空值，按长度降序排的 s； r_tem ... r；
+        # embeds_stack, att + s + r；embeds_static_stack, s + r；s_idx，s_len 中各项原来的位置；
+
         # To get mean vector at each time
         curr = 0
         rows = []
