@@ -16,6 +16,14 @@ dirmodel="models"
 dir=$(ls $dirmodel)
 for file in ${dir}
 do
+  if [[ ${file:0:5} == "multi" && $dataset != "mtg" ]]; then
+    continue
+  fi
+
+  if [[ $dataset == "mtg" && ${file:0:5} != "multi" ]]; then
+    continue
+  fi
+
   cd $dirmodel/$file
   echo "------------------$file------------------"
 
