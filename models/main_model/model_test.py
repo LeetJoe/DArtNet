@@ -2,7 +2,7 @@ import torch.nn as nn
 import numpy as np
 import torch
 import torch.nn.functional as F
-from Aggregator import MeanAggregator
+from Aggregator_test import MeanAggregator
 from utils import *
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pad_sequence
 
@@ -120,7 +120,7 @@ class DArtNet(nn.Module):
     This should be different from testing because in testing we don't use ground-truth history.
     """
     def forward(self,
-                triplets,    # 1
+                triplets,    # 1, 即 batch data
                 s_hist,    # 2
                 rel_s_hist,    # 3
                 att_s_hist,    # 4
@@ -139,13 +139,16 @@ class DArtNet(nn.Module):
 
         batch_size = len(s)
 
+        # s_hist 的子元素的长度形成的列表
         s_hist_len = torch.LongTensor(list(map(len, s_hist))).cuda()
+
+        # s_len 是对 s_hist_len 进行降序排序， s_idx 是排序后新的顺序里对应各元素在 s_hist_len 原下标
         s_len, s_idx = s_hist_len.sort(0, descending=True)
+
         # o_hist_len = torch.LongTensor(list(map(len, o_hist))).cuda()
         # o_len, o_idx = o_hist_len.sort(0, descending=True)
         # print('here1')
 
-        print('before aggregator_s:')
         s_packed_input, att_s_packed_input = self.aggregator_s(    # callable, type MeanAggregator()
             s_hist,  # 2
             rel_s_hist,  # 3
