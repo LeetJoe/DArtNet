@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 import torch
-import utils
+import utils_test as utils
 import os
 from model_test import DArtNet
 import pickle
