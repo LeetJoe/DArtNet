@@ -42,6 +42,28 @@ def train(args):
                     gamma=args.gamma)    # 8
 
     print('model initialized')
+
+    '''
+    print(model):
+    DArtNet(
+      (dropout): Dropout(p=0.5, inplace=False)
+      (sub_encoder): GRU(600, 200, batch_first=True)
+      (att_encoder): GRU(600, 200, batch_first=True)
+      (aggregator_s): MeanAggregator(
+        (dropout): Dropout(p=0.5, inplace=False)
+      )
+      (f1): Linear(in_features=400, out_features=1, bias=True)
+      (f2): Linear(in_features=600, out_features=90, bias=True)
+      (W1): Linear(in_features=1, out_features=200, bias=True)
+      (W3): Linear(in_features=600, out_features=200, bias=True)
+      (W4): Linear(in_features=400, out_features=200, bias=True)
+      (criterion): CrossEntropyLoss()
+      (att_criterion): MSELoss()
+    )
+    '''
+
+    # torch.nn.Module.parameters(recurse=False) 即模型里的所有参数的一个迭代器，进行遍历得到的都是一些 tensor, 似乎与 DArtNet.__init__()
+    # 里的 nn.Parameter(), nn.GRU(), nn.Linear() 有关系，对遍历项进行 shape 可以发现一些规律，比较复杂这里不展开，具体见笔记。
     optimizer = torch.optim.Adam(model.parameters(),
                                  lr=args.lr,
                                  weight_decay=0.00001)
@@ -153,19 +175,7 @@ def train(args):
             if use_cuda:
                 batch_data = batch_data.cuda()
 
-            '''
-            print(len(batch_data))   # 1
-            print(len(s_hist))   # 2
-            print(len(rel_s_hist))   # 3
-            print(len(att_s_hist))   # 4
-            print(len(self_att_s_hist))   # 5
-            print(len(o_hist))   # 6
-            print(len(rel_o_hist))   # 7
-            print(len(att_o_hist))   # 8
-            print(len(self_att_o_hist))   # 9
-            '''
-
-            # todo 这里需要看 model 的具体实现
+            # 完整的返回是 loss, loss_att_sub, ob_pred, sub_att_pred, s_idx
             loss, loss_att_sub = model.get_loss(
                 batch_data,   # 1
                 s_hist,   # 2
@@ -177,7 +187,10 @@ def train(args):
                 att_o_hist,   # 8
                 self_att_o_hist)   # 9
 
+            # 执行 backward() 之后，loss 本身似乎也没有发生变化，todo 那么这一句执行产生的效果体现在哪里？
             loss.backward()
+            # model.parameters() 在前面的 optimizer 那里提到过了。
+            # torch.nn.utils.clip_grad_norm_, Clips gradient norm of an iterable of parameters. Gradients are modified in-place.
             torch.nn.utils.clip_grad_norm_(model.parameters(),
                                            args.grad_norm)  # clip gradients
             # todo Adam 也需要深入看一下，不然这里看不懂
@@ -249,5 +262,4 @@ if __name__ == '__main__':
     parser.add_argument("--retrain", type=int, default=0)
 
     args = parser.parse_args()
-    print(args)
     train(args)

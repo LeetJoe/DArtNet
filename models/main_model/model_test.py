@@ -60,6 +60,7 @@ class DArtNet(nn.Module):
         # 3 * self.h_dim 是 input size, self.h_dim 是 hidden size
         # 继承关系： GRU -> RNNBase -> Module
         # GRU 生成的矩阵内容不为 0，生成结果与 seed 有关。seed 不变，初始化的 sub_encoder 的内容是一样的。
+        # 这里的 batch_first 与 torch.nn.utils.rnn.pack_padded_sequence 里的 batch_first 含义是一样的。
         self.sub_encoder = nn.GRU(3 * self.h_dim, self.h_dim, batch_first=True)
         # self.ob_encoder = self.sub_encoder
 
@@ -114,6 +115,8 @@ class DArtNet(nn.Module):
         # 两种损失函数
         self.criterion = nn.CrossEntropyLoss()
         self.att_criterion = nn.MSELoss()  # mean squared error
+        # 似乎凡是 nn.XXX() 这样的操作(nn.Parameters()除外)都相当于自动将构建的 layer 加入到 model 中. 因此执行 model.train()，会依次对
+        # Dropout, GRU*2, MeanAggregator(Dropout), Linear*5, CrossEntropyLoss, MSELoss 进行 train(). 可通过 print(model) 查看。
 
     """
     Prediction function in training. 
@@ -149,6 +152,9 @@ class DArtNet(nn.Module):
         # o_len, o_idx = o_hist_len.sort(0, descending=True)
         # print('here1')
 
+        # 这里的 s_packed_input 是由 [s, rel] 得来的，att_s_packed_input 是由 [att, s, rel] 得到的。
+        # 其中 s_packed_input.data 可以得到其中的 tensor 数据，这里是 shape=[2556, 600]. 另外 s_packed_input.batch_sizes.sum() = 2556. att_s_packed_input 也是这样。
+        # todo: 这个 batch_sizes 不知道是什么含义，因为其 sum() 与 s_len_non_zero.sum() 刚好相等，但是没找到两者之间的关联规律。
         s_packed_input, att_s_packed_input = self.aggregator_s(    # callable, type MeanAggregator()
             s_hist,  # 2
             rel_s_hist,  # 3
@@ -167,24 +173,39 @@ class DArtNet(nn.Module):
         #     self.ent_embeds, self.rel_embeds[self.num_rels:], self.W1, self.W2,
         #     self.W3, self.W4)
 
+        # 是否执行预测
         if predict_both:
-            _, s_h = self.sub_encoder(s_packed_input)
+            # self.sub_encoder 是一个 GRU layer, 这里进行的是一个 RNN 操作。
+            # 得到的 _(实际上就是output) 是一个与 s_packed_input 同类型的，但是它的 data.shape=[2556, 200], 第二个维度变了；batch_sizes是相同的。
+            # 这里 s_packed_input(就是input) 是 2556 * 600, self.sub_encoder 是 600 * 200, 按矩阵乘应该得到 2556 * 200，这里得到的是 450 * 200.
+            # input size = 600, output size = 200. 这里的 s_h 其实就是 h_n，h_0为0，GRU 的工作方式里，h_0 传入下一次运算得到 h_1,...直到最后得到 h_n。
+            # h_i.shape=[450, 200], 故 s_h.shape=[450, 200], _ 才是真正的 output, todo 不知道为什么这里不用 ouput 而只用 h_n？
+            _, s_h = self.sub_encoder(s_packed_input) # GRU 的输入实际应该由两部分组成，input 和 h_0，h_0 表示上一层传来的 h_i，这里是第一步故省略。
+            # torch.squeeze() 把 shape 中的一维维度删除，如 shape=[4,1,5,1,6]，squeeze() 之将变成 [4,5,6]
             s_h = s_h.squeeze()
+            # 这一步把是 s_h 补齐为 [500(=batch size), 200]，比如现在 s_h.shape=[450, 200], 要在维度 0 上叠加一个 shape=[50, 200] 的0矩阵。
             s_h = torch.cat(
                 (s_h, torch.zeros(len(s) - len(s_h), self.h_dim).cuda()),
                 dim=0)
+            # 这里得到的 ob_pred.shape=[500, 90]，实际上就是这 500 个数据的预测，90 是解空间，ob_pred[i]的 0~89 下标中的数据表示预测结果是相应位置的 node 的概率。
             ob_pred = self.f2(
                 self.dropout(
+                    # s[s_idx] 是按 s_idx 排序的 s，r[s_idx] 也是；分别使用 self.ent_embeds 和 self.rel_embeds 转化为 shape=[500, 200]
+                    # 的 embeddings ，再和补齐为 shape=[500, 200] 的 s_h 进行 torch.cat()，得到 shape=[500, 600]. dropout() 操作不改变 shape，
+                    # 经 self.f2(nn.Linear, 600 * 90) 层后得到 ob_pred.shape=[500, 90]
                     torch.cat((self.ent_embeds[s[s_idx]], s_h,
                                self.rel_embeds[r[s_idx]]),
                               dim=1)))
+
+            # cross entropy loss, o[s_idx] 是按 s_idx 排序的 o，ob_pred 是使用 [s, rel] 进行训练然后获得的预测（？），两者使用交叉熵损失来计算 loss。
             loss_sub = self.criterion(ob_pred, o[s_idx])
         else:
             ob_pred = None
             loss_sub = 0
 
         # _, o_h = self.ob_encoder(o_packed_input)
-
+        # (同上面的 s_h 的生成过程)self.att_encoder 是一个 GRU layer, 这里进行的是一个 RNN 操作。
+        # 得到的 _ 是一个与 att_s_packed_input 同类型的，但是它的 data.shape=[2556, 200], 第二个维度变了；batch_sizes是相同的。
         _, att_s_h = self.att_encoder(att_s_packed_input)
         # _, att_o_h = self.att_encoder(att_o_packed_input)
         # print('here2')
@@ -203,6 +224,7 @@ class DArtNet(nn.Module):
         #     dim=0)
         # print('here3')
 
+        # 与 predict 那里不同，这里只使用了 self.ent_embeds[s[s_idx]], 没有使用 self.rel_embeds[r[s_idx]]。而且 predict_both 那里也没有使用 squeeze()。
         sub_att_pred = self.f1(
             self.dropout(torch.cat((self.ent_embeds[s[s_idx]], att_s_h),
                                    dim=1))).squeeze()
@@ -219,9 +241,12 @@ class DArtNet(nn.Module):
 
         # loss_ob = self.criterion(sub_pred, s[o_idx])
 
+        # att_criterion, mean square error, MSELoss
+        # 注意这里用的是 MSELoss，不是交叉熵损失。
         loss_att_sub = self.att_criterion(sub_att_pred, a_s[s_idx])
         # loss_att_ob = self.att_criterion(ob_att_pred, a_o[o_idx])
 
+        # final loss，传参时 self.gamma 示例给的值是 1，也就是两者同地位相加得到最终的 loss
         loss = loss_sub + self.gamma * loss_att_sub
 
         return loss, loss_att_sub, ob_pred, sub_att_pred, s_idx
@@ -258,7 +283,7 @@ class DArtNet(nn.Module):
                  att_o_hist,    # 8
                  self_att_o_hist):    # 9
         print("before model.forward....")
-        # todo forward 的本质是计算 loss ？？
+        # forward 的本质是计算 loss, 后三个 _,_,_ 实际上是  ob_pred, sub_att_pred, s_idx，这后面没用到。
         loss, loss_att_sub, _, _, _ = self.forward(triplets,    # 1
                                                    s_hist,    # 2
                                                    rel_s_hist,     # 3

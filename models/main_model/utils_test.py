@@ -177,6 +177,7 @@ def get_sorted_s_r_embed(s_hist,     # 2
                          W1,
                          W3,
                          W4):
+    # s_hist 的长度列表
     s_hist_len = torch.LongTensor(list(map(len, s_hist))).cuda()
     s_len, s_idx = s_hist_len.sort(0, descending=True)
     # torch.nonzero(s_len) 按顺序返回 s_len 中非 0 无素的下标
@@ -187,8 +188,8 @@ def get_sorted_s_r_embed(s_hist,     # 2
     s_hist_sorted = []
     rel_hist_sorted = []
     att_hist_sorted = []
-    # 按排序结果，将三都重排放在新的变量组里。
-    # 这里令 s_idx = s_idx[:num_non_zero]，那后面不就不需要再截断了？
+    # 按排序结果，将三都重排放在新的变量组里。对于 idx, s_hist_sorted[dix]->rel_hist_sorted[idx]->att_hist_sorted[idx] 关系是对应的。
+    # 这里令 s_idx = s_idx[:num_non_zero]，那后面不就不需要再截断了？确实可以，但是 s_idx 后面还有用，可以定义一个新变量。
     for idx in s_idx:
         s_hist_sorted.append(s_hist[idx.item()])
         rel_hist_sorted.append(rel_hist[idx.item()])
@@ -199,7 +200,7 @@ def get_sorted_s_r_embed(s_hist,     # 2
     flat_att = []
     len_s = []
 
-    # 在这里截断？直接对 s_idx 截断然后再按剩下的 s_idx 重组不就行了，为什么要分两步？
+    # 在这里截断？直接对 s_idx 截断然后再按剩下的 s_idx 重组不就行了，为什么要分两步？可以一步完成。
     s_hist_sorted = s_hist_sorted[:num_non_zero]
     rel_hist_sorted = rel_hist_sorted[:num_non_zero]
     att_hist_sorted = att_hist_sorted[:num_non_zero]
@@ -224,6 +225,7 @@ def get_sorted_s_r_embed(s_hist,     # 2
 
     # view(-1, 1) 表示重新组织一个数组，比如 flat_att=[1,2,3,4,5,6,7,8], torch.tensor(flat_att).view(-1, 1) 会将其转化成一个
     # 8 * 1 的二维数据，等效于 view(8, 1); 而 view(4, 2) 则会将其转化为 4*2 的数组。如果 view 的两个参数相乘不等于 len 会报错。
+    # 这里的 view(-1, 1) 把一个一维向量转化成了一个 n * 1 二维矩阵，注意其第二个维度不再是一个数字，而是一个 list，list 里只有一个数字。
     test_input = torch.tensor(flat_att).view(-1, 1).cuda()
     test_input = test_input.to(torch.float32)
 
