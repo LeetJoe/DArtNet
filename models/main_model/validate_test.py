@@ -15,6 +15,7 @@ result = collections.namedtuple(
 result_dict = {}
 
 
+# 与 test.py 文件里的 test 方法除了读取的 txt 文件有所不同以外，其它完全一样。
 def test(args):
     # load data
     num_nodes, num_rels = utils.get_total_number(args.dataset_path, 'stat.txt')
