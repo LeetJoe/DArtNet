@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import utils
 import os
-from model import DArtNet
+from model_test import DArtNet
 import pickle
 import collections
 import time
@@ -211,6 +211,7 @@ if __name__ == '__main__':
                         help="cuttoff position")
     parser.add_argument("--batch-size", type=int, default=1024)
     parser.add_argument("--gamma", type=float, default=1)
+    parser.add_argument("--no-wait", action='store_true')
 
     args = parser.parse_args()
 
@@ -218,6 +219,7 @@ if __name__ == '__main__':
         args.dropout, args.n_hidden, args.gamma, args.num_k)
 
     try:
+        # 如果已存在生成文件，则读取其中的内容
         with open(model_dir + '/compiled_results_validate.tsv', 'r') as f:
             res = f.readlines()[1:]
 
@@ -236,18 +238,21 @@ if __name__ == '__main__':
     try:
         while True:
             flag = False
+            # 扫描所有的对应 model 目录里的 epoch-i.pth 文件，对文件名中的 i 排序并以此为遍历序列。
             for epoch in sorted([
                     int(file[6:-4]) for file in os.listdir(model_dir)
                     if (file[-4:] == '.pth' and file[:5] == 'epoch')
             ],
                                 reverse=True):
+
+                # 只有发现了有新的 epoch-i.pth，即 epoch=i 的记录在result_dict中不存在时，执行 test，结果汇总在 result_dict 变量中.
                 if epoch not in result_dict:
                     args.epoch = epoch
                     print(f'testing epoch {epoch}')
                     model_state_file = model_dir + '/epoch-{}.pth'.format(
                         args.epoch)
                     flag = True
-                    test(args)
+                    test(args)   # 全都在这里完成
 
                     with open(model_dir + '/compiled_results_validate.tsv',
                               'w') as f:
@@ -262,9 +267,11 @@ if __name__ == '__main__':
 
                     break
 
-            if not flag:
+            if not flag: # 如果前面执行了 test，则不等待，重新扫描目录；若扫描未发现新的 epoch-i.pth 文件，则进入 sleep。
+                if args.no_wait:
+                    break
                 time.sleep(60)
-    except KeyboardInterrupt as _:
+    except KeyboardInterrupt as _: # 如果发生了手动打断，则在退出前把 result_dict 存入文件中。
         with open(model_dir + '/compiled_results_validate.tsv', 'w') as f:
             f.write('Epoch\tMRR\tHits1\tHits3\tHits10\tAttribute_Loss\tMR\n')
             for key, val in result_dict.items():

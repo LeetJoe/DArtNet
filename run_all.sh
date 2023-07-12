@@ -36,12 +36,12 @@ do
   echo "time cost: ${ctime}s"
 
   # validate
-  stime=`date +%s`
-  echo "python validate.py -d ../../data_local/$dataset --dataset $dataset --gpu $gpu --model $model --dropout $dropout --n-hidden $nhidden --batch-size $batch --gamma $gamma"
+  # stime=`date +%s`
+  # echo "python validate.py -d ../../data_local/$dataset --dataset $dataset --gpu $gpu --model $model --dropout $dropout --n-hidden $nhidden --batch-size $batch --gamma $gamma"
   # run here
-  etime=`date +%s`
-  let ctime=etime-stime
-  echo "time cost: ${ctime}s"
+  # etime=`date +%s`
+  # let ctime=etime-stime
+  # echo "time cost: ${ctime}s"
 
   # validate
   stime=`date +%s`
