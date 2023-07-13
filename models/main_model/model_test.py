@@ -307,9 +307,10 @@ class DArtNet(nn.Module):
         # self.att_o_dict = {}
         self.att_residual_dict = {}
 
+        # 只用 att_* 部分，loss 和 ob_pred 这里都用不到。
         _, loss_att_sub, _, sub_att_pred, s_idx = self.forward(
             triplets, s_hist, rel_s_hist, att_s_hist, self_att_s_hist, o_hist,
-            rel_o_hist, att_o_hist, self_att_o_hist, False)
+            rel_o_hist, att_o_hist, self_att_o_hist, False) # 注意这里的 False, 与 get_loss() 不同，这里 predict_both=False.
         # print(triplets[:, 0])
         # print(s_hist)
         # print(sub_att_pred)
@@ -321,10 +322,14 @@ class DArtNet(nn.Module):
             s_att = sub_att_pred[i].cpu().item()
 
             if s not in self.att_s_dict:
-                self.att_s_dict[s] = s_att
-                indices[s] = i
+                self.att_s_dict[s] = s_att  # s_att 是预测值
+                indices[s] = i  # 记录 s 的下标
             else:
-                assert (self.att_s_dict[s] == s_att)
+                if (self.att_s_dict[s] != s_att):
+                    print(s, " ", self.att_s_dict[s], " ", s_att)
+                # 这里的断言是要求在这一批次的数据中，s 原先有过的预测值需要与后来再次出现的预测值相同。
+                # todo 多次预测的值可能相近但不可能完全相同吧，这里为什么要做这种断言？
+                assert (abs(self.att_s_dict[s]-s_att) < 0.0000001)
 
             # s = triplets[o_idx[i], 0].type(torch.LongTensor).item()
             # o = triplets[o_idx[i], 2].type(torch.LongTensor).item()
@@ -345,6 +350,7 @@ class DArtNet(nn.Module):
 
         return loss_att_sub
 
+    # 单三元组预测
     def predict_single(self, triplet, s_hist, rel_s_hist, att_s_hist,
                        self_att_s_hist, o_hist, rel_o_hist, att_o_hist,
                        self_att_o_hist):
@@ -403,6 +409,7 @@ class DArtNet(nn.Module):
 
             self.latest_time = t
 
+        # 如果有历史数据，通过历史数据计算出 s_h；如果没有，置 s_h 为0.
         if len(s_hist) == 0:
             s_h = torch.zeros(self.h_dim).cuda()
 
@@ -449,6 +456,8 @@ class DArtNet(nn.Module):
         #         inp_o.view(1, len(o_history), 3 * self.h_dim))
         #     o_h = o_h.squeeze()
 
+        # 与 forward() 里的过程类似，先得到 s_h，然后与 ent_embeds 和 rel_embeds 拼接再经 Linear 得到预测结果。
+        # ob_pred.shape=[90], 每一个 item() 表示对应的 node 符合预测结果的概率。
         ob_pred = self.f2(
             torch.cat((self.ent_embeds[s], s_h, self.rel_embeds[r]), dim=0))
         # sub_pred = self.f2(
@@ -456,9 +465,12 @@ class DArtNet(nn.Module):
         #         (self.ent_embeds[o], o_h, self.rel_embeds[self.num_rels:][r]),
         #         dim=0))
 
+
+        # _ 中是 topk probability, o_candidate 是相应的下标，这里就是 node id.
         _, o_candidate = torch.topk(ob_pred, self.num_k)
         # _, s_candidate = torch.topk(sub_pred, self.num_k)
 
+        # todo 更新 cache，这里为什么要更新？ cache 会更新一些数据进 test 系列数据，这样或许会使用预测结果更准确？
         self.entity_s_his_cache[s], self.rel_s_his_cache[
             s], self.att_s_his_cache[s], self.self_att_s_his_cache[
                 s] = self.update_cache(self.entity_s_his_cache[s],
@@ -497,19 +509,28 @@ class DArtNet(nn.Module):
         # sub_pred = torch.sigmoid(sub_pred)
         ob_pred = torch.sigmoid(ob_pred)
 
+        # ob_pred 长度等于 node num，表示各个位置的节点作为此关系中 tail 的位置的概率，这里是要判断 o 的概率，它可能不是最大的，但是只要大于一个临界值便可采用。
         ground = ob_pred[o].clone()
 
+        # torch.nonzero() 对 all_triplets[:, 0](即所有三元组中的s) 中的s进行检查，如果等于这里的 s，则将对应位置的下标作为行加入矩阵中，最后得到一个 shape=[x, 1]
+        # 的矩阵，其中 x 是 s 出现的次数. 再使用 view(-1) 将其变成一个列表得到 s_id，即所有 test 数据6元组中，head=s 的那些在 test 集合中的位置。
         s_id = torch.nonzero(
-            all_triplets[:, 0].type(torch.cuda.LongTensor) == s).view(-1)
+            all_triplets[:, 0].type(torch.cuda.LongTensor) == s).to('cpu').view(-1)
+        # 与前面类似，这里找的是 test 所有6元组中，head=s, 且 rel=r的那些位置，放在 idx 中。
         idx = torch.nonzero(
-            all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).view(-1)
+            all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).to('cpu').view(-1)
+        # 对 s_id 按 idx 进行筛选。
         idx = s_id[idx]
-        idx = all_triplets[idx, 2].type(torch.cuda.LongTensor)
-        ob_pred[idx] = 0
-        ob_pred[o_label] = ground
+        idx = all_triplets[idx, 2].type(torch.cuda.LongTensor)  # todo [idx, 2] ? 这取到的是 o 吗？
+        ob_pred[idx] = 0     # 将这些位置置 0 了, idx 里包含 o。
+        ob_pred[o_label] = ground      # 然后又单独把 o 的概率恢复了。
 
+        # 找到 ob_pred 里概率大于 ground 的那些位置
         ob_pred_comp1 = (ob_pred > ground).data.cpu().numpy()
+        # 找到 ob_pred 里概率等于 ground 的那些位置
         ob_pred_comp2 = (ob_pred == ground).data.cpu().numpy()
+        # np.sum(ob_pred_comp1) 得到的是 ob_pred 里面 p>ground 的数量，np.sum(ob_pred_comp2) 是 p=ground，np.sum(ob_pred_comp2) - 1 是为了除去 o 本身，
+        # todo 但是再除以 2 是为什么？然后这两部分相加再 +1 ??
         rank_ob = np.sum(ob_pred_comp1) + (
             (np.sum(ob_pred_comp2) - 1.0) / 2) + 1
 

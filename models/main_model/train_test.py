@@ -143,7 +143,9 @@ def train(args):
 
     while True:
         print('a train loop started')
-        model.train()   # todo 每一轮应该没有数据才会，为什么上来就 train？
+        # 这里并实际的训练，实际的训练代码在 forward() 里面，这个方法的作用为设置 model 的模式为训练模式,实际执行的是 model.train(True),其中会对
+        # model 的每一个子层（子 Module)执行 train(True)。与之相对的是 model.eval()，相当于执行了 model.train(False)。
+        model.train()
         if epoch == args.max_epochs:
             break
         epoch += 1

@@ -86,28 +86,35 @@ def test(args):
 
     print("Using epoch: {}".format(checkpoint['epoch']))
 
+    # total data 是 train.txt + valid.txt
     total_data = torch.from_numpy(total_data)
+    # test_data 是 valid.txt
     test_data = torch.from_numpy(test_data)
 
+    # 设置 model 为 evaluation 模式，实际上执行的是 model.train(False)，即非训练模式。
     model.eval()
     total_att_sub_loss = 0
     total_ranks = np.array([])
     total_ranks_filter = np.array([])
     ranks = []
 
+    # torch.no_grad()是一个上下文管理函数，告诉torch不要进行梯度计算。在推理的时候，如果确定不会调用 tensor.backward() ,可以使用此函数来降低内存使用。
+    # 其实际效果是设置了一个参数值 requires_grad=False。
     with torch.no_grad():
         latest_time = test_times[0]
         j = 0
         while j < len(test_data):
             k = j
             while k < len(test_data):
+                # test_data[x][-1] 是 time
                 if test_data[k][-1] == test_data[j][-1]:
                     k += 1
                 else:
                     break
 
+            # 从 test_data[j] 到 test_data[k] 之前的项有相同的 time
             start = j
-            while start < k:
+            while start < k: # start 到 k 之间可能隔了多个 batch_size，每"最多batch_size"项数据进行一次预测。
                 end = min(k, start + args.batch_size)
 
                 batch_data = test_data[start:end].clone()
@@ -130,10 +137,12 @@ def test(args):
                                          rel_o_hist, att_o_hist,
                                          self_att_o_hist)
 
+                # 将 loss_sub 乘上 batch_size(这一批次的数量，可能小于参数 batch-size)，得到总体 loss。所以 loss_sub 原本是按 batch_size 平均过？
                 total_att_sub_loss += (loss_sub.item() * (end - start + 1))
 
                 start += args.batch_size
 
+            # 从 j 到 k，即前面同一 time 的所有数据，上一个循环使用 batch_size 进行了分批，这次就是未分批的全部，用 i 对它进行遍历。
             for i in range(j, k):
                 batch_data = test_data[i].clone()
                 s_hist = entity_s_history_data_test[i].copy()
@@ -148,6 +157,7 @@ def test(args):
                 if use_cuda:
                     batch_data = batch_data.cuda()
 
+
                 ranks_pred = model.evaluate_filter(batch_data, s_hist,
                                                    rel_s_hist, att_s_hist,
                                                    self_att_s_hist, o_hist,
@@ -159,15 +169,21 @@ def test(args):
 
             j = k
 
+    # 这里得到的 total_ranks_filter 长度为 252，鉴于前面的分组方法，可以知道所有的数据里的 time 改变了 252 次
     ranks.append(total_ranks_filter)
 
     for rank in ranks:
         total_ranks = np.concatenate((total_ranks, rank))
+
+    # 这里的 mrr 含义是求 total_ranks 里所有元素的倒数的和的平均值
     mrr = np.mean(1.0 / total_ranks)
+    # 这里的 mr 就是 total_ranks 里所有元素的和的平均值
     mr = np.mean(total_ranks)
     hits = []
 
+    # 所以这里 hit 的含义实际上是指，那些概率大于或等于 ground 的位置，都被视为是一次命中。（并不是我一开始所理解的跳数）
     for hit in [1, 3, 10]:
+        # 这里的 np.mean 的含义是：对 total_ranks 里值 <= hit 的元素的"个数"进行累加然后除以 len(total_ranks)
         avg_count = np.mean((total_ranks <= hit))
         hits.append(avg_count)
 
@@ -225,6 +241,7 @@ if __name__ == '__main__':
             res = f.readlines()[1:]
 
         for r in res:
+            continue
             a = r.strip().split('\t')
             result_dict[int(a[0])] = result(epoch=int(a[0]),
                                             MRR=float(a[1]),
