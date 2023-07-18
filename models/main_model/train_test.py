@@ -72,6 +72,8 @@ def train(args):
     if use_cuda:
         model.cuda()
 
+    # 文件名即对应的 gen_history 里的 xxx_s/o_history_data 变量里的内容，即每一个 i 里放的是对应时刻的 xxx_s/o_his 的快照；
+    # 惟独 self_att_s/o_history_data 里的数据作了修改，第 i 个位置里放的是 self_att_s/o_his 快照 list 里的第一个项，也是一个 list。
     train_sub_entity = '/train_entity_s_history_data.txt'
     train_sub_rel = '/train_rel_s_history_data.txt'
     train_sub_att = '/train_att_s_history_data.txt'
@@ -163,7 +165,17 @@ def train(args):
             self_att_o_history_train)
 
         iteration = 0
+
         # 按 args.batch_size 把参数里的数组进行分组并按次序返回，用这种方式遍历
+        # batch_data <==> train_data
+        # s_hist <==> entity_s_history_train(_data)
+        # rel_s_hist <==> rel_s_history_train(_data)
+        # o_hist <==> entity_o_history_train(_data)
+        # rel_o_hist <==> rel_o_history_train(_data)
+        # att_s_hist <==> att_s_history_train(_data)
+        # self_att_s_hist <==> self_att_s_history_train(_data)
+        # att_o_hist <==> att_o_history_train(_data)
+        # self_att_o_hist <==> self_att_o_history_train(_data)
         for batch_data, s_hist, rel_s_hist, o_hist, rel_o_hist, att_s_hist, self_att_s_hist, att_o_hist, self_att_o_hist in utils.make_batch3(
                 train_data, entity_s_history_train, rel_s_history_train,
                 entity_o_history_train, rel_o_history_train,
@@ -190,6 +202,7 @@ def train(args):
                 self_att_o_hist)   # 9
 
             # 执行 backward() 之后，loss 本身似乎也没有发生变化，todo 那么这一句执行产生的效果体现在哪里？
+            # type(loss): tensor(4.5667, device='cuda:0', grad_fn=<AddBackward0>)
             loss.backward()
             # model.parameters() 在前面的 optimizer 那里提到过了。
             # torch.nn.utils.clip_grad_norm_, Clips gradient norm of an iterable of parameters. Gradients are modified in-place.

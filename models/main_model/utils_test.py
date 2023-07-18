@@ -207,7 +207,8 @@ def get_sorted_s_r_embed(s_hist,     # 2
 
     for i in range(len(s_hist_sorted)):
         for j in range(len(s_hist_sorted[i])):
-            # 长度序列
+            # 比 s_len 更细一级的长度序列, s_len 是 xxx_s_his 级别的长度， s_len 是 xxx_s_his 下一级到 cache 级别的长度。s_len[k] 表现在 len_s 中
+            # 是在某一个位置开始连续 s_len[k] 个值对应于 s_hist_sorted[k] 的 s_len[k] 个子 list 的长度。
             len_s.append(len(s_hist_sorted[i][j]))
             for k in range(len(s_hist_sorted[i][j])):
                 # 打平了的 s, rel, attr 序列
@@ -220,31 +221,41 @@ def get_sorted_s_r_embed(s_hist,     # 2
     r_tem = r[s_idx]
 
     # 对 id 进行 embedding。看来 embedding 不止是可以对自然语言的字词进行，任何可以视为特征的东西都可以使用 embedding？
+    # ent_embeds.shape=[90, 200], 是每一个 node id 的 embedding; rel_embeds.shape=[1, 200], 是每一个 rel id 的 embedding.
+    # embeds_s/rel 即把 flat_s/rel 表达为对应的 embeddings 列表，两者长度相同，在 flat_s/rel 里 i 个位置是 id，embeds_s/rel 对应位置则是此 id 的 embedding。
     embeds_s = ent_embeds[torch.LongTensor(flat_s).cuda()]
     embeds_rel = rel_embeds[torch.LongTensor(flat_rel).cuda()]
 
     # view(-1, 1) 表示重新组织一个数组，比如 flat_att=[1,2,3,4,5,6,7,8], torch.tensor(flat_att).view(-1, 1) 会将其转化成一个
     # 8 * 1 的二维数据，等效于 view(8, 1); 而 view(4, 2) 则会将其转化为 4*2 的数组。如果 view 的两个参数相乘不等于 len 会报错。
     # 这里的 view(-1, 1) 把一个一维向量转化成了一个 n * 1 二维矩阵，注意其第二个维度不再是一个数字，而是一个 list，list 里只有一个数字。
-    test_input = torch.tensor(flat_att).view(-1, 1).cuda()
-    test_input = test_input.to(torch.float32)
+    flat_att_viewed = torch.tensor(flat_att).view(-1, 1).cuda()
+    flat_att_viewed = flat_att_viewed.to(torch.float32)
 
     # W1 is Linear(in_features=1, out_features=200, bias=True)
     # Applies the rectified linear unit function element-wise.
+    # 与 embeds_s/rel 不同，embeds_att 是对原始序列先 Linear 再 ReLU 得到其 embedding, 是实时计算的；而 embeds_s/rel 是通过
+    # ent/rel_embeds 映射而来，对应的 node/rel id 在 ent/rel_embeds 是初始化好的。
+    # 这个 embeds_att 是 att_o 打平后的 embedding, 不是 self_att 的embedding。
     embeds_att = F.relu(
-        W1(
-            test_input
+        W1(flat_att_viewed)
+    )
+
+    # torch.cat([a, b, c], dim=1) 表示按第二个维度进行拼接，最后行数不变，列变宽（累加）；a,b,c列数可以不同，行数(其它维度)必须相同；
+    # torch.cat([a, b, c], dim=0) 表示按第一个维度进行拼接，最后列数不变，行变多（累加）；a,b,c行数可以不同，列数(其它维度)必须相同；
+    # embeds_att, embeds_s, embeds_rel 都是 200 列，cat()后变成 600 列，经 W3() 后又变成 200列；embeds.shape=[4178, 200]
+    embeds = F.relu(
+        W3(
+            torch.cat(
+                [embeds_att, embeds_s, embeds_rel],
+                dim=1
+            ).to(torch.float32)
         )
     )
 
-    # torch.cat([a, b, c], dim=1) 表示按第二个维度进行拼接，最后行数不变，列变宽（累加）；a,b,c列数可以不同，行数必须相同；
-    # torch.cat([a, b, c], dim=0) 表示按第一个维度进行拼接，最后列数不变，行变多（累加）；a,b,c行数可以不同，列数必须相同；
-    # embeds_att, embeds_s, embeds_rel 都是 200 列，cat()后变成 600 列，经 W3() 后又变成 200列；
-    embeds = F.relu(W3(torch.cat([embeds_att, embeds_s, embeds_rel], dim=1).to(torch.float32)))
-
     # embeds_split = torch.split(embeds, len_s)
 
-    # 与 embeds 相比，前面少一个 embeds_att .
+    # 与 embeds 相比，前面少一个 embeds_att . embeds_static.shape=[4178, 200]
     embeds_static = F.relu(W4(torch.cat([embeds_s, embeds_rel], dim=1).to(torch.float32)))
     # embeds_static_split = torch.split(embeds_static, len_s)
 

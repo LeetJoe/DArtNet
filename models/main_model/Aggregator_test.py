@@ -56,8 +56,9 @@ class MeanAggregator(nn.Module):
         # embeds_stack 里的信息是 [att, s, rel]，embeds_static_stack 里的信息是 [s, rel]。这两个变量都是用 s_len 相同的方式做了排序的，所以后面
         # 才可以在转换之后使用 s_len_non_zero 进行 split。
 
-        # s_len(注意不是len_s,len_s是未排序的长度值序列) 按元素项长度降序的长度值序列； s_len_non_zero, 前者去掉后面的0；s_tem 去掉空值，按长度降序排的 s； r_tem ... r；
+        # s_len(注意不是len_s) 按元素项长度降序的长度值序列，s_len_non_zero 是前者去掉后面的0；s_tem/r_tem 去掉空值，按长度降序排的 s/s；
         # embeds_stack, embeddings of att + s + r；embeds_static_stack, embedings of s + r；s_idx，s_len 中各项原来的位置；
+        # len_s 是比 s_len 更深入一层（到 cache 级别）组织的列表的长度的序列。
 
         # To get mean vector at each time
         curr = 0
@@ -67,7 +68,7 @@ class MeanAggregator(nn.Module):
             rows.extend([i] * leng)
             cols.extend(list(range(curr, curr + leng)))
             curr += leng
-        rows = torch.LongTensor(rows)
+        rows = torch.LongTensor(rows) # len(rows) == len(cols) == len(len_s) == sum(s_len_non_zero).item()
         cols = torch.LongTensor(cols)
         # stack 把 rows 和 cols 叠在一起增加一个维度, 如 rows.shape=[4, 4], cols.shape=[4, 4], 则 idxes.shape=[2, 4, 4]
         idxes = torch.stack([rows, cols], dim=0)
@@ -78,9 +79,12 @@ class MeanAggregator(nn.Module):
         # 其含义是：idxes中的每一个元素j，表示mask_tensor[i]行里的一个下标j，而values里与idxes对应位置的元素k，即mask_tensor[i][j]=k是一个非0元素；
         # 故 j < len(mask_tensor[i]),且不在idxes里的其它 j 表示 mask_tensor[i][j]=0. 用这种方式来压缩表示 sparse matrix.
         # 这种表示方法是 sparse 压缩存储中的 coo 模式，即 coordinate matrix 模式。一般定义里，行数 m 与列数 n 是相等的，等于 nnz，但是这里应该是另一种存储方式，它的行数
-        # m=n<=nnz=原矩阵的行数，如果一行中有多个非0元素，则对应的列作为 indices 是一个 list 而非数字，相对应的 values 也是一个 list。
+        # m<=n=nnz=原矩阵的行数，如果一行中有多个非0元素，则对应的列作为 indices 是一个 list 而非数字，相对应的 values 也是一个 list。
         mask_tensor = torch.sparse.FloatTensor(idxes, torch.ones(len(rows)))
         mask_tensor = mask_tensor.cuda()
+        # mask_tensor 作为一个矩阵的含义是，其行是按 len_s 组织，行数 m=len(len_s)；其列是 n=sum(len_s);
+        # 如果按照 coo 的一般定义，应有 m==n==nnz，这里却是 m<=n，是用 len_s 进行重新的组织，使得行下标不会出现重复的值，对于行下标相同的多个非0元素，列下标表示为一个数组，
+        # 用这样的方式完成用 2556 * 4178 表达出 4178 * 4178 的压缩矩阵。其中 4178 即 flat_s/r/o 的长度。
 
         # torch.sparse.mm 表示矩阵相乘, mask_tensor.shape=[2556, 4178], embeds_stack.shape=[4178,200], 结果是[2556,200]
         # 这里用到了 embeds_stack，里面包含 [att, s, rel] 信息，经 mask_tensor 把相关内容变换进了 embeds_sum 里。
@@ -117,6 +121,7 @@ class MeanAggregator(nn.Module):
             # ent_embeds 和 rel_embeds 是 DArtNet 初始化时生成的 torch.nn.parameter.Parameter Layer。
             # ent_embeds.shape=[num_nodes, 200], rel_embeds.shape=[num_rels, 200], num_nodes 与 num_rels 取自 stat.txt， 200 取自超参 n_hidden。
             # ent_embeds[s_tem[i]] 是 node s_tem[i] 的 hidden vector, 一个长度为 200 的向量。按第二维度(第二个参数1) repeat 之后得到的是 shape=[len, 200], 即以列为准在行上复制了 len 次。
+            # len(embeds) 实际上就是 count(tail), 或 count(cache)
             self_e_embed = ent_embeds[s_tem[i]].repeat(len(embeds), 1)
             self_r_embed = rel_embeds[r_tem[i]].repeat(len(embeds), 1)
 

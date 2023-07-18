@@ -188,6 +188,7 @@ class DArtNet(nn.Module):
                 (s_h, torch.zeros(len(s) - len(s_h), self.h_dim).cuda()),
                 dim=0)
             # 这里得到的 ob_pred.shape=[500, 90]，实际上就是这 500 个数据的预测，90 是解空间，ob_pred[i]的 0~89 下标中的数据表示预测结果是相应位置的 node 的概率。
+            # self.f2 是 [600, 90] 的变换。
             ob_pred = self.f2(
                 self.dropout(
                     # s[s_idx] 是按 s_idx 排序的 s，r[s_idx] 也是；分别使用 self.ent_embeds 和 self.rel_embeds 转化为 shape=[500, 200]
@@ -197,7 +198,9 @@ class DArtNet(nn.Module):
                                self.rel_embeds[r[s_idx]]),
                               dim=1)))
 
-            # cross entropy loss, o[s_idx] 是按 s_idx 排序的 o，ob_pred 是使用 [s, rel] 进行训练然后获得的预测（？），两者使用交叉熵损失来计算 loss。
+            # o[s_idx] 是按 s_idx 排序的 o，实际上就是 500 个 tail 的值；
+            # ob_pred.shape=[500, 90], 每一项是一个长度为 90(与 node 总个数相同) 的向量，表示预测结果是相应 node id 的概率。
+            # 两者使用交叉熵损失来计算 loss。
             loss_sub = self.criterion(ob_pred, o[s_idx])
         else:
             ob_pred = None
@@ -206,6 +209,7 @@ class DArtNet(nn.Module):
         # _, o_h = self.ob_encoder(o_packed_input)
         # (同上面的 s_h 的生成过程)self.att_encoder 是一个 GRU layer, 这里进行的是一个 RNN 操作。
         # 得到的 _ 是一个与 att_s_packed_input 同类型的，但是它的 data.shape=[2556, 200], 第二个维度变了；batch_sizes是相同的。
+        # att_s_h.shape=[450, 200]
         _, att_s_h = self.att_encoder(att_s_packed_input)
         # _, att_o_h = self.att_encoder(att_o_packed_input)
         # print('here2')
@@ -225,6 +229,7 @@ class DArtNet(nn.Module):
         # print('here3')
 
         # 与 predict 那里不同，这里只使用了 self.ent_embeds[s[s_idx]], 没有使用 self.rel_embeds[r[s_idx]]。而且 predict_both 那里也没有使用 squeeze()。
+        # self.f1 是 [400, 1] 的变换，最终得到的 sub_att_pred.shape=[500]，其中每一个值代表对 self_att 的预测.
         sub_att_pred = self.f1(
             self.dropout(torch.cat((self.ent_embeds[s[s_idx]], att_s_h),
                                    dim=1))).squeeze()
@@ -242,7 +247,7 @@ class DArtNet(nn.Module):
         # loss_ob = self.criterion(sub_pred, s[o_idx])
 
         # att_criterion, mean square error, MSELoss
-        # 注意这里用的是 MSELoss，不是交叉熵损失。
+        # 注意这里用的是 MSELoss，不是交叉熵损失。sub_att_pred 与 a_s[s_idx] 的 shape 都是 [500]
         loss_att_sub = self.att_criterion(sub_att_pred, a_s[s_idx])
         # loss_att_ob = self.att_criterion(ob_att_pred, a_o[o_idx])
 
