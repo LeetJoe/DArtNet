@@ -17,7 +17,7 @@ result_dict = {}
 
 # 与 test.py 文件里的 test 方法除了读取的 txt 文件有所不同以外，其它完全一样。
 def test(args):
-    # load data
+    # load data todo 这些数据需要重复加载吗？应该可以在外层加载。
     num_nodes, num_rels = utils.get_total_number(args.dataset_path, 'stat.txt')
     test_data, test_times = utils.load_hexaruples(args.dataset_path,
                                                   'valid.txt')
@@ -45,6 +45,7 @@ def test(args):
     if use_cuda:
         model.cuda()
 
+    # todo 这些数据也都可以在外层加载，没必要每次循环里重复加载。
     test_sub_entity = '/valid_entity_s_history_data.txt'
     test_sub_rel = '/valid_rel_s_history_data.txt'
     test_sub_att = '/valid_att_s_history_data.txt'
@@ -80,6 +81,7 @@ def test(args):
 
     model.load_state_dict(checkpoint['state_dict'])
 
+    # 将 model.xxx_his_test/cache 里的数据初始化为空串。
     model.init_history()
 
     model.latest_time = checkpoint['latest_time']
@@ -101,10 +103,10 @@ def test(args):
     # torch.no_grad()是一个上下文管理函数，告诉torch不要进行梯度计算。在推理的时候，如果确定不会调用 tensor.backward() ,可以使用此函数来降低内存使用。
     # 其实际效果是设置了一个参数值 requires_grad=False。
     with torch.no_grad():
-        latest_time = test_times[0]
+        latest_time = test_times[0]     # validate 脚本里的所有 test 数据实际上都是 validate.txt 里的数据，并非指 test.txt 里的数据
         j = 0
-        while j < len(test_data):
-            k = j
+        while j < len(test_data):  # 遍历 validate data
+            k = j # k >= j, 从 j 开始，不超过 len(test_data)
             while k < len(test_data):
                 # test_data[x][-1] 是 time
                 if test_data[k][-1] == test_data[j][-1]:
@@ -112,9 +114,9 @@ def test(args):
                 else:
                     break
 
-            # 从 test_data[j] 到 test_data[k] 之前的项有相同的 time
+            # todo 从 test_data[j] 到 test_data[k] 之间的项有相同的 time
             start = j
-            while start < k: # start 到 k 之间可能隔了多个 batch_size，每"最多batch_size"项数据进行一次预测。
+            while start < k: # todo start 到 k 之间可能隔了多个 batch_size，每"最多batch_size"项数据进行一次预测。
                 end = min(k, start + args.batch_size)
 
                 batch_data = test_data[start:end].clone()
@@ -132,12 +134,15 @@ def test(args):
                 if use_cuda:
                     batch_data = batch_data.cuda()
 
+                # 对 batch_data 进行预测， xxx_hist 是与 batch_data 的对应的关系数据，通过 gen_history.py 生成的那些。
+                # 返回的 loss_sub 其实是 loss_att_sub，是对 att 的预测。
                 loss_sub = model.predict(batch_data, s_hist, rel_s_hist,
                                          att_s_hist, self_att_s_hist, o_hist,
                                          rel_o_hist, att_o_hist,
                                          self_att_o_hist)
 
-                # 将 loss_sub 乘上 batch_size(这一批次的数量，可能小于参数 batch-size)，得到总体 loss。所以 loss_sub 原本是按 batch_size 平均过？
+                # 将 loss_sub 乘上 batch_size(这一批次的数量，可能小于参数 batch-size)，得到总体 loss。
+                # todo 所以 loss_sub 原本是按 batch_size 平均过？必须乘回去得到原本的 total loss？
                 total_att_sub_loss += (loss_sub.item() * (end - start + 1))
 
                 start += args.batch_size
@@ -157,7 +162,12 @@ def test(args):
                 if use_cuda:
                     batch_data = batch_data.cuda()
 
-
+                # batch_data 在这里是一条单一的 6 元组，后面的数据都是跟它相对应的关系信息。
+                # 最后的 total_data 是 train data + validate data
+                # ranks_pred 的评价的是，对 tail 的预测里，那些实际并不存在的 [h,r,o_i] 关系，但是对 tail 的预测概率却比对应的原 [h,r,o]
+                # 的概率要大的 tails 的数量. 比如 node id 为1~10, 对[1,2,3]，预测结果显示 p(3)=0.5, 原始数据里存在 [1,2,1],[1,2,2]
+                # 这两种关系，那就先把 1,2 排除，3 自身也要排除；然后在 4~10 里，如果有 p(4)>=p(3),p(6)>=p(3),p(8)>=p(3),那么 rank_pred
+                # 的值与 3 线性相关。
                 ranks_pred = model.evaluate_filter(batch_data, s_hist,
                                                    rel_s_hist, att_s_hist,
                                                    self_att_s_hist, o_hist,
@@ -169,11 +179,12 @@ def test(args):
 
             j = k
 
-    # 这里得到的 total_ranks_filter 长度为 252，鉴于前面的分组方法，可以知道所有的数据里的 time 改变了 252 次
+    # 这里得到的 total_ranks_filter 长度为 252,其长度与 test_data 相同，每一条数据都有一个rank_pred.
     ranks.append(total_ranks_filter)
 
     for rank in ranks:
         total_ranks = np.concatenate((total_ranks, rank))
+    # todo 前面这几步在搞什么！？把 total_ranks_filter 放进 ranks,又拿出来 concatinate，得到的 total_ranks 与 total_ranks_filter 完全就是一个东西。
 
     # 这里的 mrr 含义是求 total_ranks 里所有元素的倒数的和的平均值
     mrr = np.mean(1.0 / total_ranks)
@@ -182,6 +193,7 @@ def test(args):
     hits = []
 
     # 所以这里 hit 的含义实际上是指，那些概率大于或等于 ground 的位置，都被视为是一次命中。
+    # todo 但这个命中是错误的，因为实际中并没有这样的关系，所以这个命中应该越少越好？
     for hit in [1, 3, 10]:
         # 这里的 np.mean 的含义是：对 total_ranks 里值 <= hit 的元素的"个数"进行累加然后除以 len(total_ranks)
         avg_count = np.mean((total_ranks <= hit))

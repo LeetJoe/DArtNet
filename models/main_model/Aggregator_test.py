@@ -176,19 +176,29 @@ class MeanAggregator(nn.Module):
             e_att = F.relu(W1(a_o.type(torch.FloatTensor).cuda().view(
                 -1, 1))).view(-1, self.h_dim)
             # e_s_att = F.relu(W2(torch.cat([e_att, e_s], dim=-1)))
+            # d_h, e_r
+
+            # e.shape = [1, 200]
             e = F.relu(W3(torch.cat([e_att, e_s, e_r], dim=-1)))
+            # c_h, e_r   e_static.shape = [1, 200]
             e_static = F.relu(W4(torch.cat([e_s, e_r], dim=-1)))
+
+            # e, e_static 是 m 行 n 列，torch.mean(e, dim=0) 表示在行上进行平均（也就是对列进行平均，最后得到一行）。
+            # 如果 m=1, n=200，按行进行平均将得到 shape=[200]，而其中各值不变。
             tem = torch.mean(e, dim=0)
             tem_static = torch.mean(e_static, dim=0)
             # print(self_a_o)
             e_self_att = F.relu(W1(self_a_o.cuda().view(1,
                                                         1))).view(self.h_dim)
 
+            # 这里的组合方式与 train 里面是一致的, inp_s/att.shape=[len(s_history), 600]
+            # embeddings of head, embeddings of relation, embeddings of static
             inp_s[i] = torch.cat([
                 ent_embeds[s].view(self.h_dim), rel_embeds[r].view(self.h_dim),
                 tem_static
             ],
                                  dim=0)
+            # embeddings of attr, embeddings of head, embeddings of non-static
             inp_att[i] = torch.cat(
                 [e_self_att, ent_embeds[s].view(self.h_dim), tem], dim=0)
         return inp_s, inp_att

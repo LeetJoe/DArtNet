@@ -312,10 +312,11 @@ class DArtNet(nn.Module):
         # self.att_o_dict = {}
         self.att_residual_dict = {}
 
-        # 只用 att_* 部分，loss 和 ob_pred 这里都用不到。
+        # 得到预测xx_pred和损失loss_xxx，只用 att_* 部分，loss 和 ob_pred 这里都用不到。
+        # 注意这里最后的参数 False, 与 get_loss() 不同，这里 predict_both=False,即 ob_pred 不执行
         _, loss_att_sub, _, sub_att_pred, s_idx = self.forward(
             triplets, s_hist, rel_s_hist, att_s_hist, self_att_s_hist, o_hist,
-            rel_o_hist, att_o_hist, self_att_o_hist, False) # 注意这里的 False, 与 get_loss() 不同，这里 predict_both=False.
+            rel_o_hist, att_o_hist, self_att_o_hist, False)
         # print(triplets[:, 0])
         # print(s_hist)
         # print(sub_att_pred)
@@ -326,10 +327,10 @@ class DArtNet(nn.Module):
             t = triplets[s_idx[i], 5].type(torch.LongTensor).item()
             s_att = sub_att_pred[i].cpu().item()
 
-            if s not in self.att_s_dict:
+            if s not in self.att_s_dict: # 如果是第一次预测，保存预测 att 值
                 self.att_s_dict[s] = s_att  # s_att 是预测值
                 indices[s] = i  # 记录 s 的下标
-            else:
+            else: # 如果不是第一次预测，要求新的预测结果要与旧的预测结果一致
                 if (self.att_s_dict[s] != s_att):
                     print(s, " ", self.att_s_dict[s], " ", s_att)
                 # 这里的断言是要求在这一批次的数据中，s 原先有过的预测值需要与后来再次出现的预测值相同。
@@ -346,6 +347,8 @@ class DArtNet(nn.Module):
             # else:
             #     assert (self.att_o_dict[o] == o_att)
 
+        # 每次 predict() 执行的时候，都把这个 self.att_residual_dict 置空，然后在本轮预测结束之后，在 self.att_s_dict 里尚未被预测过的
+        # 节点会使用一个空的 s_h 进行预测然后放进 self.att_residual_dict 里面，todo 似乎是用来在更新 cache 的时候占位使用。
         for i in range(self.num_nodes):
             if i not in self.att_s_dict:  # and i not in self.att_o_dict:
                 s_h = torch.zeros(1, self.h_dim).cuda()
@@ -355,7 +358,7 @@ class DArtNet(nn.Module):
 
         return loss_att_sub
 
-    # 单三元组预测
+    # 单三元组预测,这里实际上只预测了 head 那一半，tail 那一半没有预测
     def predict_single(self, triplet, s_hist, rel_s_hist, att_s_hist,
                        self_att_s_hist, o_hist, rel_o_hist, att_o_hist,
                        self_att_o_hist):
@@ -367,6 +370,7 @@ class DArtNet(nn.Module):
         a_o = triplet[4].type(torch.cuda.FloatTensor)
         t = triplet[5].cpu()
         # print('here')
+        # 这里对 xxx_s_his_cache 的构建不是在此方法里完成，而且通过对此方法的多次调用由历史数据构建而成。
         if self.latest_time != t:
 
             for ee in range(self.num_nodes):
@@ -430,10 +434,12 @@ class DArtNet(nn.Module):
             att_s_history = self.att_s_his_test[s]
             self_att_s_history = self.self_att_s_his_test[s]
 
+            # inp_s 与 _ 分别是以 i 为下标组织的 I_ht 和 A_ht., 用作 GRU 的输入。
             inp_s, _ = self.aggregator_s.predict(
                 s_history, rel_s_history, att_s_history, self_att_s_history, s,
                 r, self.ent_embeds, self.rel_embeds, self.W1, self.W3, self.W4)
 
+            # GRU encoder，与 train 里的操作一样。
             _, s_h = self.sub_encoder(
                 inp_s.view(1, len(s_history), 3 * self.h_dim))
             s_h = s_h.squeeze()
@@ -462,7 +468,7 @@ class DArtNet(nn.Module):
         #     o_h = o_h.squeeze()
 
         # 与 forward() 里的过程类似，先得到 s_h，然后与 ent_embeds 和 rel_embeds 拼接再经 Linear 得到预测结果。
-        # ob_pred.shape=[90], 每一个 item() 表示对应的 node 符合预测结果的概率。
+        # ob_pred.shape=[90], 每一个 item() 表示对应的 node 符合预测结果的概率。是对 tail 的预测
         ob_pred = self.f2(
             torch.cat((self.ent_embeds[s], s_h, self.rel_embeds[r]), dim=0))
         # sub_pred = self.f2(
@@ -498,6 +504,7 @@ class DArtNet(nn.Module):
 
         return ob_pred
 
+    # triplet 及后面的数据都是单条记录的（all_triplets 除外，它是所有 train + validate 数据）
     def evaluate_filter(self, triplet, s_hist, rel_s_hist, att_s_hist,
                         self_att_s_hist, o_hist, rel_o_hist, att_o_hist,
                         self_att_o_hist, all_triplets):
@@ -506,38 +513,48 @@ class DArtNet(nn.Module):
         o = triplet[2].type(torch.cuda.LongTensor)
         # print(s_hist)
         # print(rel_s_hist)
+
+        # 得到的是对 tail 的预测，是一个 shape=[90] 的tensor
         ob_pred = self.predict_single(triplet, s_hist, rel_s_hist, att_s_hist,
                                       self_att_s_hist, o_hist, rel_o_hist,
                                       att_o_hist, self_att_o_hist)
         o_label = o
         s_label = s
-        # sub_pred = torch.sigmoid(sub_pred)
+        # sub_pred = torch.sigmoid(sub_pred), 经过 sigmoid 方法之后， ob_pred.shape 不变
         ob_pred = torch.sigmoid(ob_pred)
 
         # ob_pred 长度等于 node num，表示各个位置的节点作为此关系中 tail 的位置的概率，这里是要判断 o 的概率，它可能不是最大的，但是只要大于一个临界值便可采用。
+        # 以真实的 o 的预测概率作为 "ground", 是一个"下限"/"保底"
         ground = ob_pred[o].clone()
 
         # torch.nonzero() 对 all_triplets[:, 0](即所有三元组中的s) 中的s进行检查，如果等于这里的 s，则将对应位置的下标作为行加入矩阵中，最后得到一个 shape=[x, 1]
-        # 的矩阵，其中 x 是 s 出现的次数. 再使用 view(-1) 将其变成一个列表得到 s_id，即所有 test 数据6元组中，head=s 的那些在 test 集合中的位置。
+        # 的矩阵，其中 x 是 s 出现的次数. 再使用 view(-1) 将其变成一个列表得到 s_id，即所有 validate+train 数据6元组中，head=s 的那些在 validate+train 集合中的位置。
         s_id = torch.nonzero(
             all_triplets[:, 0].type(torch.cuda.LongTensor) == s).to('cpu').view(-1)
-        # 与前面类似，这里找的是 test 所有6元组中，head=s, 且 rel=r的那些位置，放在 idx 中。
+        # 与前面类似，这里找的是 validate+train 所有6元组中，head=s, 且 rel=r 的那些位置，放在 idx 中。
         idx = torch.nonzero(
             all_triplets[s_id, 1].type(torch.cuda.LongTensor) == r).to('cpu').view(-1)
         # 对 s_id 按 idx 进行筛选。
         idx = s_id[idx]
-        idx = all_triplets[idx, 2].type(torch.cuda.LongTensor)  # todo [idx, 2] ? 这取到的是 o 吗？
+
+        # 找到 validate+train 与 idx 对应位置的 o, 放进 idx 里，此时 idx 不再是下标，而是原 idx 所表示的下标处的 o
+        idx = all_triplets[idx, 2].type(torch.cuda.LongTensor)
         ob_pred[idx] = 0     # 将这些位置置 0 了, idx 里包含 o。
         ob_pred[o_label] = ground      # 然后又单独把 o 的概率恢复了。
+        # 前面这一段的作用是，把所有 validate+train 里的数据中，s 和 r 与 triplet 相等的那些数据里的 tail 数据都找出来，然后把 ob_pred
+        # 里面对这些 tail 的预测概率置为0，然后单独把 triplet 里的 tail 的概率保留。ob_pred 的下标 i 的值表示的是预测 o 是 i 的概率。
 
-        # 找到 ob_pred 里概率大于 ground 的那些位置
+        # ob_pred_comp1.shape=[90],找到 ob_pred 里概率大于 ground 的那些位置，也就是预测的 [s,r,o] 中，[s,r,o] 实际并不存在于数据集中，但是对 o 的预测概率却大于
+        # triplet 中实际的 o 的那些 node id, 对 ob_pred_comp1，有 ob_pred_comp1[node_id]=True.
         ob_pred_comp1 = (ob_pred > ground).data.cpu().numpy()
-        # 找到 ob_pred 里概率等于 ground 的那些位置
+        # ob_pred_comp2.shape=[90],找到 ob_pred 里概率等于 ground 的那些位置(node id), ob_pred_comp2[node_id]=True
         ob_pred_comp2 = (ob_pred == ground).data.cpu().numpy()
+
         # np.sum(ob_pred_comp1) 得到的是 ob_pred 里面 p>ground 的数量，np.sum(ob_pred_comp2) 是 p=ground，np.sum(ob_pred_comp2) - 1 是为了除去 o 本身，
         # todo 但是再除以 2 是为什么？然后这两部分相加再 +1 ??
         rank_ob = np.sum(ob_pred_comp1) + (
             (np.sum(ob_pred_comp2) - 1.0) / 2) + 1
+        # rank_ob = 预测概率大于 ground 的 node id 的数量 + （预测概率等于 ground 的 node id 的数量 - 1）/ 2 + 1
 
         # ground = sub_pred[s].clone()
 
