@@ -181,7 +181,7 @@ def test(args):
     mr = np.mean(total_ranks)
     hits = []
 
-    # 所以这里 hit 的含义实际上是指，那些概率大于或等于 ground 的位置，都被视为是一次命中。（并不是我一开始所理解的跳数）
+    # 所以这里 hit 的含义实际上是指，那些概率大于或等于 ground 的位置，都被视为是一次命中。
     for hit in [1, 3, 10]:
         # 这里的 np.mean 的含义是：对 total_ranks 里值 <= hit 的元素的"个数"进行累加然后除以 len(total_ranks)
         avg_count = np.mean((total_ranks <= hit))
